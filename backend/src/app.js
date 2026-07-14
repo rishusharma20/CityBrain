@@ -3,6 +3,12 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/authRoutes.js";
 import officerRoutes from "./routes/officerRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
+import heatmapRoutes from "./routes/heatmapRoutes.js";
+import leaderboardRoutes from "./routes/leaderboardRoutes.js";
+import publicRoutes from "./routes/publicRoutes.js";
 
 const app = express();
 
@@ -23,6 +29,12 @@ app.get("/api/health", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/officer", officerRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/heatmaps", heatmapRoutes);
+app.use("/api/leaderboards", leaderboardRoutes);
+app.use("/api/public", publicRoutes);
 
 // Global Error Handling Middleware
 app.use((err, req, res, next) => {

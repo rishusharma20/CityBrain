@@ -1,10 +1,7 @@
 import Complaint from "../models/Complaint.js";
+import { sendSystemNotification } from "../utils/notificationHelper.js";
 
-// =========================================================================
-// Helper: Helper to construct scope query filter for the officer
-// An officer can see complaints assigned directly to them, OR unassigned
-// complaints in their matching department and ward.
-// =========================================================================
+// Helper: Construct scope query filter for the officer (assigned directly or matches dept/ward and is unassigned)
 const getOfficerScopeFilter = (user) => {
   return {
     $or: [
@@ -22,13 +19,11 @@ const getOfficerScopeFilter = (user) => {
 // 1. Officer Dashboard
 // =========================================================================
 // GET /api/officer/dashboard
-// Private Access (Officer & Admin Only)
 export const getOfficerDashboard = async (req, res) => {
   try {
     const scopeFilter = getOfficerScopeFilter(req.user);
 
-    // Run parallel aggregation for dashboard statistics
-    const statsPromise = Complaint.aggregate([
+    const statsResult = await Complaint.aggregate([
       { $match: scopeFilter },
       {
         $group: {
@@ -37,9 +32,7 @@ export const getOfficerDashboard = async (req, res) => {
           pending: {
             $sum: {
               $cond: [
-                {
-                  $in: ["$status", ["Pending", "Accepted", "In_Progress"]],
-                },
+                { $in: ["$status", ["Pending", "Accepted", "In_Progress"]] },
                 1,
                 0,
               ],
@@ -71,16 +64,10 @@ export const getOfficerDashboard = async (req, res) => {
       },
     ]);
 
-    // Fetch the 5 latest complaints within scope
-    const complaintsPromise = Complaint.find(scopeFilter)
+    const latestComplaints = await Complaint.find(scopeFilter)
       .sort({ createdAt: -1 })
       .limit(5)
       .populate("citizen", "fullName email phone");
-
-    const [statsResult, latestComplaints] = await Promise.all([
-      statsPromise,
-      complaintsPromise,
-    ]);
 
     const stats = statsResult[0] || {
       total: 0,
@@ -105,7 +92,7 @@ export const getOfficerDashboard = async (req, res) => {
     console.error("Dashboard Error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal Server Error while loading dashboard statistics.",
+      message: "Internal Server Error loading dashboard.",
     });
   }
 };
@@ -114,10 +101,8 @@ export const getOfficerDashboard = async (req, res) => {
 // 2. View Assigned Complaints
 // =========================================================================
 // GET /api/officer/assigned
-// Private Access
 export const getAssignedComplaints = async (req, res) => {
   try {
-    // Returns complaints explicitly assigned to the logged-in officer
     const complaints = await Complaint.find({ assignedOfficer: req.user._id })
       .sort({ updatedAt: -1 })
       .populate("citizen", "fullName email phone");
@@ -131,477 +116,19 @@ export const getAssignedComplaints = async (req, res) => {
     console.error("Get Assigned Complaints Error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal Server Error while retrieving assigned complaints.",
+      message: "Internal Server Error retrieving assigned complaints.",
     });
   }
 };
 
 // =========================================================================
-// 3. View Complaint Details
-// =========================================================================
-// GET /api/officer/complaints/:id
-// Private Access
-export const getComplaintDetails = async (req, res) => {
-  try {
-    const complaint = await Complaint.findById(req.params.id)
-      .populate("citizen", "fullName email phone")
-      .populate("remarks.officer", "fullName role department");
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Security Check: Verify complaint matches officer's assignment or department/ward
-    const isAssigned =
-      complaint.assignedOfficer &&
-      complaint.assignedOfficer.toString() === req.user._id.toString();
-    
-    const isDepartmentMatch =
-      complaint.department === req.user.department &&
-      complaint.ward === req.user.ward;
-
-    if (!isAssigned && !isDepartmentMatch) {
-      return res.status(403).json({
-        success: false,
-        message: "Access Denied: This complaint is out of your department/ward scope.",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Get Complaint Details Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while loading complaint details.",
-    });
-  }
-};
-
-// =========================================================================
-// 4. Accept Complaint
-// =========================================================================
-// PUT /api/officer/accept/:id
-// Private Access
-export const acceptComplaint = async (req, res) => {
-  try {
-    const complaint = await Complaint.findById(req.params.id);
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Security Check: Match department & ward
-    if (
-      complaint.department !== req.user.department ||
-      complaint.ward !== req.user.ward
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: You cannot accept complaints outside your department/ward.",
-      });
-    }
-
-    if (complaint.assignedOfficer) {
-      return res.status(400).json({
-        success: false,
-        message: "This complaint is already accepted by another officer.",
-      });
-    }
-
-    complaint.assignedOfficer = req.user._id;
-    complaint.status = "Accepted";
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Complaint accepted by Officer ${req.user.fullName}.`,
-    });
-
-    await complaint.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Complaint accepted successfully.",
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Accept Complaint Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while accepting the complaint.",
-    });
-  }
-};
-
-// =========================================================================
-// 5. Reject Complaint
-// =========================================================================
-// PUT /api/officer/reject/:id
-// Private Access
-export const rejectComplaint = async (req, res) => {
-  try {
-    const { reason } = req.body;
-
-    if (!reason) {
-      return res.status(400).json({
-        success: false,
-        message: "A rejection reason is required.",
-      });
-    }
-
-    const complaint = await Complaint.findById(req.params.id);
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Security Check: Must be assigned or unassigned but matching scope
-    const isAssigned =
-      complaint.assignedOfficer &&
-      complaint.assignedOfficer.toString() === req.user._id.toString();
-    const isScopeMatch =
-      complaint.department === req.user.department &&
-      complaint.ward === req.user.ward;
-
-    if (!isAssigned && !isScopeMatch) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: You are not authorized to access this complaint.",
-      });
-    }
-
-    // Reset assigned officer to allow others to claim it, change status to Rejected
-    complaint.assignedOfficer = null;
-    complaint.status = "Rejected";
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Rejected by Officer ${req.user.fullName}. Reason: ${reason}`,
-    });
-
-    await complaint.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Complaint rejected and returned to queue.",
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Reject Complaint Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while rejecting the complaint.",
-    });
-  }
-};
-
-// =========================================================================
-// 6. Update Status
-// =========================================================================
-// PUT /api/officer/status/:id
-// Private Access
-export const updateComplaintStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const validStatuses = ["Accepted", "In_Progress", "Resolved", "Escalated"];
-
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid status. Choose from: ${validStatuses.join(", ")}`,
-      });
-    }
-
-    const complaint = await Complaint.findById(req.params.id);
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Match assigned officer
-    if (
-      !complaint.assignedOfficer ||
-      complaint.assignedOfficer.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: You must accept the complaint before updating its status.",
-      });
-    }
-
-    // If marking resolved, direct to complete flow or check rules
-    if (status === "Resolved") {
-      if (!complaint.resolutionImage) {
-        return res.status(400).json({
-          success: false,
-          message: "Please upload a resolution image before marking as Resolved.",
-        });
-      }
-      complaint.resolvedAt = Date.now();
-    }
-
-    complaint.status = status;
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Status updated to ${status} by Officer ${req.user.fullName}.`,
-    });
-
-    await complaint.save();
-
-    res.status(200).json({
-      success: true,
-      message: `Status updated to ${status} successfully.`,
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Update Status Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while updating complaint status.",
-    });
-  }
-};
-
-// =========================================================================
-// 7. Add Remarks
-// =========================================================================
-// PUT /api/officer/remarks/:id
-// Private Access
-export const addRemarks = async (req, res) => {
-  try {
-    const { remarks } = req.body;
-
-    if (!remarks || remarks.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Remarks text is required.",
-      });
-    }
-
-    const complaint = await Complaint.findById(req.params.id);
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Match scope
-    const isAssigned =
-      complaint.assignedOfficer &&
-      complaint.assignedOfficer.toString() === req.user._id.toString();
-    const isScopeMatch =
-      complaint.department === req.user.department &&
-      complaint.ward === req.user.ward;
-
-    if (!isAssigned && !isScopeMatch) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: You are not authorized to comment on this complaint.",
-      });
-    }
-
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: remarks,
-    });
-
-    await complaint.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Remarks added successfully.",
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Add Remarks Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while adding remarks.",
-    });
-  }
-};
-
-// =========================================================================
-// 8. Upload Resolution Image
-// =========================================================================
-// PUT /api/officer/resolution-image/:id
-// Private Access
-export const uploadResolutionImage = async (req, res) => {
-  try {
-    const { resolutionImage } = req.body;
-
-    if (!resolutionImage || resolutionImage.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Resolution image URL is required.",
-      });
-    }
-
-    const complaint = await Complaint.findById(req.params.id);
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Verify assignment
-    if (
-      !complaint.assignedOfficer ||
-      complaint.assignedOfficer.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: You are not the assigned officer for this complaint.",
-      });
-    }
-
-    complaint.resolutionImage = resolutionImage;
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Resolution image uploaded by Officer ${req.user.fullName}.`,
-    });
-
-    await complaint.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Resolution image uploaded successfully.",
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Resolution Image Upload Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while uploading resolution image.",
-    });
-  }
-};
-
-// =========================================================================
-// 9. Mark Complaint Completed
-// =========================================================================
-// PUT /api/officer/complete/:id
-// Private Access
-export const markComplaintCompleted = async (req, res) => {
-  try {
-    const { remarks, resolutionImage } = req.body;
-
-    const complaint = await Complaint.findById(req.params.id);
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found.",
-      });
-    }
-
-    // Verify assignment
-    if (
-      !complaint.assignedOfficer ||
-      complaint.assignedOfficer.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: Only the assigned officer can mark this complaint completed.",
-      });
-    }
-
-    // Require resolution image
-    const finalImage = resolutionImage || complaint.resolutionImage;
-    if (!finalImage || finalImage.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Resolution image is required to mark the complaint resolved.",
-      });
-    }
-
-    complaint.status = "Resolved";
-    complaint.resolvedAt = Date.now();
-    complaint.resolutionImage = finalImage;
-
-    const finalRemarkText = remarks || "Complaint marked resolved and completed.";
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Completed: ${finalRemarkText}`,
-    });
-
-    await complaint.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Complaint marked as Resolved and completed.",
-      data: complaint,
-    });
-  } catch (error) {
-    console.error("Complete Complaint Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while completing the complaint.",
-    });
-  }
-};
-
-// =========================================================================
-// 10. View Officer History
-// =========================================================================
-// GET /api/officer/history
-// Private Access
-export const getOfficerHistory = async (req, res) => {
-  try {
-    // Find all complaints touched by this officer (assigned or commented on)
-    // that are resolved or rejected.
-    const historyFilter = {
-      $or: [
-        { assignedOfficer: req.user._id },
-        { "remarks.officer": req.user._id },
-      ],
-      status: { $in: ["Resolved", "Rejected"] },
-    };
-
-    const complaints = await Complaint.find(historyFilter)
-      .sort({ resolvedAt: -1, updatedAt: -1 })
-      .populate("citizen", "fullName email phone");
-
-    res.status(200).json({
-      success: true,
-      count: complaints.length,
-      data: complaints,
-    });
-  } catch (error) {
-    console.error("Get Officer History Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error while retrieving officer history.",
-    });
-  }
-};
-
-// =========================================================================
-// 11. View Officer Statistics & SLA Analytics
+// 3. Officer Statistics & SLA Analytics
 // =========================================================================
 // GET /api/officer/statistics
-// Private Access
 export const getOfficerStatistics = async (req, res) => {
   try {
     const officerId = req.user._id;
 
-    // Find all complaints involving this officer
     const complaints = await Complaint.find({
       $or: [
         { assignedOfficer: officerId },
@@ -617,7 +144,6 @@ export const getOfficerStatistics = async (req, res) => {
     let totalResolutionTimeHours = 0;
 
     complaints.forEach((comp) => {
-      // If currently assigned or was resolving it
       if (
         comp.assignedOfficer &&
         comp.assignedOfficer.toString() === officerId.toString()
@@ -627,12 +153,10 @@ export const getOfficerStatistics = async (req, res) => {
 
       if (comp.status === "Resolved") {
         resolvedCount++;
-        // SLA check
         if (comp.resolvedAt && comp.slaDeadline) {
           if (new Date(comp.resolvedAt) <= new Date(comp.slaDeadline)) {
             onTimeResolutions++;
           }
-          // Avg resolution time Calculation
           const durationMs = new Date(comp.resolvedAt) - new Date(comp.createdAt);
           totalResolutionTimeHours += durationMs / (1000 * 60 * 60);
         }
@@ -640,7 +164,6 @@ export const getOfficerStatistics = async (req, res) => {
         escalatedCount++;
       } else if (["Pending", "Accepted", "In_Progress"].includes(comp.status)) {
         pendingCount++;
-        // Auto escalate flag in stats if past deadline
         if (comp.slaDeadline && new Date() > new Date(comp.slaDeadline)) {
           escalatedCount++;
         }
@@ -672,25 +195,27 @@ export const getOfficerStatistics = async (req, res) => {
     console.error("Get Officer Statistics Error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal Server Error while calculating statistics.",
+      message: "Internal Server Error calculating statistics.",
     });
   }
 };
 
 // =========================================================================
-// 12. View Pending Complaints
+// 4. View Officer History
 // =========================================================================
-// GET /api/officer/pending
-// Private Access
-export const getPendingComplaints = async (req, res) => {
+// GET /api/officer/history
+export const getOfficerHistory = async (req, res) => {
   try {
-    const scopeFilter = getOfficerScopeFilter(req.user);
-    
-    const complaints = await Complaint.find({
-      ...scopeFilter,
-      status: { $in: ["Pending", "Accepted", "In_Progress"] },
-    })
-      .sort({ createdAt: 1 }) // First-in, first-out priority
+    const historyFilter = {
+      $or: [
+        { assignedOfficer: req.user._id },
+        { "remarks.officer": req.user._id },
+      ],
+      status: { $in: ["Resolved", "Rejected"] },
+    };
+
+    const complaints = await Complaint.find(historyFilter)
+      .sort({ resolvedAt: -1, updatedAt: -1 })
       .populate("citizen", "fullName email phone");
 
     res.status(200).json({
@@ -699,55 +224,361 @@ export const getPendingComplaints = async (req, res) => {
       data: complaints,
     });
   } catch (error) {
-    console.error("Get Pending Complaints Error:", error);
+    console.error("Get Officer History Error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal Server Error while fetching pending complaints.",
+      message: "Internal Server Error retrieving history.",
     });
   }
 };
 
 // =========================================================================
-// 13. View Resolved Complaints
+// 5. Accept Complaint
 // =========================================================================
-// GET /api/officer/resolved
-// Private Access
-export const getResolvedComplaints = async (req, res) => {
+// PUT /api/officer/accept/:id
+export const acceptComplaint = async (req, res) => {
   try {
-    const scopeFilter = getOfficerScopeFilter(req.user);
+    const complaint = await Complaint.findById(req.params.id);
 
-    const complaints = await Complaint.find({
-      ...scopeFilter,
-      status: "Resolved",
-    })
-      .sort({ resolvedAt: -1 })
-      .populate("citizen", "fullName email phone");
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found.",
+      });
+    }
+
+    if (
+      complaint.department !== req.user.department ||
+      complaint.ward !== req.user.ward
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Complaint out of your department/ward scope.",
+      });
+    }
+
+    if (complaint.assignedOfficer) {
+      return res.status(400).json({
+        success: false,
+        message: "This complaint is already accepted by another officer.",
+      });
+    }
+
+    complaint.assignedOfficer = req.user._id;
+    complaint.status = "Accepted";
+    complaint.remarks.push({
+      officer: req.user._id,
+      text: `Complaint accepted by Officer ${req.user.fullName}.`,
+    });
+
+    await complaint.save();
+
+    await sendSystemNotification({
+      recipient: complaint.citizen,
+      sender: req.user._id,
+      type: "Assignment",
+      title: "Complaint Claimed",
+      message: `Your complaint "${complaint.title}" has been accepted by Officer ${req.user.fullName}.`,
+      complaint: complaint._id,
+    });
 
     res.status(200).json({
       success: true,
-      count: complaints.length,
-      data: complaints,
+      message: "Complaint accepted successfully.",
+      data: complaint,
     });
   } catch (error) {
-    console.error("Get Resolved Complaints Error:", error);
+    console.error("Accept Complaint Error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal Server Error while fetching resolved complaints.",
+      message: "Internal Server Error accepting complaint.",
     });
   }
 };
 
 // =========================================================================
-// 14. View Escalated Complaints
+// 6. Reject Complaint
+// =========================================================================
+// PUT /api/officer/reject/:id
+export const rejectComplaint = async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: "A rejection reason is required.",
+      });
+    }
+
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found.",
+      });
+    }
+
+    const isAssigned =
+      complaint.assignedOfficer &&
+      complaint.assignedOfficer.toString() === req.user._id.toString();
+    const isScopeMatch =
+      complaint.department === req.user.department &&
+      complaint.ward === req.user.ward;
+
+    if (!isAssigned && !isScopeMatch) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Action not authorized.",
+      });
+    }
+
+    complaint.assignedOfficer = null;
+    complaint.status = "Rejected";
+    complaint.remarks.push({
+      officer: req.user._id,
+      text: `Rejected by Officer ${req.user.fullName}. Reason: ${reason}`,
+    });
+
+    await complaint.save();
+
+    await sendSystemNotification({
+      recipient: complaint.citizen,
+      sender: req.user._id,
+      type: "Status_Update",
+      title: "Complaint Reverted",
+      message: `Your complaint "${complaint.title}" has been returned to the department queue.`,
+      complaint: complaint._id,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Complaint rejected and returned to queue.",
+      data: complaint,
+    });
+  } catch (error) {
+    console.error("Reject Complaint Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error rejecting complaint.",
+    });
+  }
+};
+
+// =========================================================================
+// 7. Update Status
+// =========================================================================
+// PUT /api/officer/status/:id
+export const updateComplaintStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ["Accepted", "In_Progress", "Resolved", "Escalated"];
+
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Choose from: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found.",
+      });
+    }
+
+    if (
+      !complaint.assignedOfficer ||
+      complaint.assignedOfficer.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You are not assigned to this complaint.",
+      });
+    }
+
+    if (status === "Resolved") {
+      if (!complaint.resolutionImage) {
+        return res.status(400).json({
+          success: false,
+          message: "A resolution image is required before marking as Resolved.",
+        });
+      }
+      complaint.resolvedAt = Date.now();
+    }
+
+    complaint.status = status;
+    complaint.remarks.push({
+      officer: req.user._id,
+      text: `Status updated to ${status} by Officer ${req.user.fullName}.`,
+    });
+
+    await complaint.save();
+
+    await sendSystemNotification({
+      recipient: complaint.citizen,
+      sender: req.user._id,
+      type: "Status_Update",
+      title: "Status Update",
+      message: `Your complaint "${complaint.title}" status is now "${status}".`,
+      complaint: complaint._id,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Status updated to ${status} successfully.`,
+      data: complaint,
+    });
+  } catch (error) {
+    console.error("Update Status Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error updating status.",
+    });
+  }
+};
+
+// =========================================================================
+// 8. Add Remarks
+// =========================================================================
+// PUT /api/officer/remarks/:id
+export const addRemarks = async (req, res) => {
+  try {
+    const { remarks } = req.body;
+
+    if (!remarks || remarks.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Remarks text is required.",
+      });
+    }
+
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found.",
+      });
+    }
+
+    const isAssigned =
+      complaint.assignedOfficer &&
+      complaint.assignedOfficer.toString() === req.user._id.toString();
+    const isScopeMatch =
+      complaint.department === req.user.department &&
+      complaint.ward === req.user.ward;
+
+    if (!isAssigned && !isScopeMatch) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Not authorized.",
+      });
+    }
+
+    complaint.remarks.push({
+      officer: req.user._id,
+      text: remarks,
+    });
+
+    await complaint.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Remarks added successfully.",
+      data: complaint,
+    });
+  } catch (error) {
+    console.error("Add Remarks Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error adding remarks.",
+    });
+  }
+};
+
+// =========================================================================
+// 9. Mark Completed
+// =========================================================================
+// PUT /api/officer/complete/:id
+export const markComplaintCompleted = async (req, res) => {
+  try {
+    const { remarks, resolutionImage } = req.body;
+
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found.",
+      });
+    }
+
+    if (
+      !complaint.assignedOfficer ||
+      complaint.assignedOfficer.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Not authorized.",
+      });
+    }
+
+    const finalImage = resolutionImage || complaint.resolutionImage;
+    if (!finalImage || finalImage.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Resolution image URL is required for completion.",
+      });
+    }
+
+    complaint.status = "Resolved";
+    complaint.resolvedAt = Date.now();
+    complaint.resolutionImage = finalImage;
+
+    const finalRemarkText = remarks || "Resolved and completed.";
+    complaint.remarks.push({
+      officer: req.user._id,
+      text: `Completed: ${finalRemarkText}`,
+    });
+
+    await complaint.save();
+
+    await sendSystemNotification({
+      recipient: complaint.citizen,
+      sender: req.user._id,
+      type: "Completion",
+      title: "Complaint Resolved",
+      message: `Your complaint "${complaint.title}" has been resolved. Proof: ${finalImage}`,
+      complaint: complaint._id,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Complaint marked completed successfully.",
+      data: complaint,
+    });
+  } catch (error) {
+    console.error("Complete Complaint Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error completing complaint.",
+    });
+  }
+};
+
+// =========================================================================
+// 10. View Escalated Complaints
 // =========================================================================
 // GET /api/officer/escalated
-// Private Access
 export const getEscalatedComplaints = async (req, res) => {
   try {
     const scopeFilter = getOfficerScopeFilter(req.user);
 
-    // Escalated complaints are either marked status: "Escalated" OR
-    // unresolved complaints whose SLA deadline has passed
     const complaints = await Complaint.find({
       ...scopeFilter,
       $or: [
@@ -758,7 +589,7 @@ export const getEscalatedComplaints = async (req, res) => {
         },
       ],
     })
-      .sort({ slaDeadline: 1 }) // Sort by most overdue first
+      .sort({ slaDeadline: 1 })
       .populate("citizen", "fullName email phone");
 
     res.status(200).json({
@@ -770,7 +601,7 @@ export const getEscalatedComplaints = async (req, res) => {
     console.error("Get Escalated Complaints Error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal Server Error while fetching escalated complaints.",
+      message: "Internal Server Error retrieving escalated complaints.",
     });
   }
 };
