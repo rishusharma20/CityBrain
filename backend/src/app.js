@@ -9,11 +9,16 @@ import analyticsRoutes from "./routes/analyticsRoutes.js";
 import heatmapRoutes from "./routes/heatmapRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
+import complaintRoutes from "./routes/complaintRoutes.js";
+import userComplaintRoutes from "./routes/userComplaintRoutes.js";
 
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -35,6 +40,8 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/heatmaps", heatmapRoutes);
 app.use("/api/leaderboards", leaderboardRoutes);
 app.use("/api/public", publicRoutes);
+app.use("/api/complaints", complaintRoutes);
+app.use("/api/user", userComplaintRoutes);
 
 // Global Error Handling Middleware
 app.use((err, req, res, next) => {

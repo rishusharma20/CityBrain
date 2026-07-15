@@ -1,37 +1,32 @@
 import Complaint from "../models/Complaint.js";
 
-// Ward coordinates configuration
-const WARD_GEO_MAPPING = {
-  "Ward 1": { lat: 12.9716, lng: 77.5946 },
-  "Ward 2": { lat: 12.9216, lng: 77.5846 },
-  "Ward 3": { lat: 12.9816, lng: 77.6046 },
-  "Ward 4": { lat: 12.9516, lng: 77.5746 },
-  "Ward 5": { lat: 12.9916, lng: 77.6146 },
-  "Ward 12": { lat: 12.9416, lng: 77.5646 },
-  "Ward 15": { lat: 12.9316, lng: 77.5546 },
-};
-
-const getCoords = (ward) => WARD_GEO_MAPPING[ward] || { lat: 12.9716, lng: 77.5946 };
-
 // =========================================================================
 // 1. Complaint Density (Coordinate list with weights)
 // =========================================================================
 // GET /api/heatmaps/complaint-density
 export const getComplaintDensity = async (req, res) => {
   try {
+    // Use GeoJSON location data from the new Complaint schema
     const rawData = await Complaint.aggregate([
-      { $group: { _id: "$ward", weight: { $sum: 1 } } }
+      { $match: { location: { $exists: true } } },
+      {
+        $group: {
+          _id: "$wardNumber",
+          weight: { $sum: 1 },
+          // Pick representative coordinates from the first complaint in each ward
+          lat: { $first: { $arrayElemAt: ["$location.coordinates", 1] } },
+          lng: { $first: { $arrayElemAt: ["$location.coordinates", 0] } },
+        },
+      },
     ]);
 
-    const formattedData = rawData.map((item) => {
-      const coords = getCoords(item._id);
-      return {
-        ward: item._id,
-        lat: coords.lat,
-        lng: coords.lng,
-        weight: item.weight,
-      };
-    });
+    const formattedData = rawData.map((item) => ({
+      ward: `Ward ${item._id}`,
+      wardNumber: item._id,
+      lat: item.lat,
+      lng: item.lng,
+      weight: item.weight,
+    }));
 
     res.status(200).json({
       success: true,
@@ -53,12 +48,23 @@ export const getComplaintDensity = async (req, res) => {
 export const getWardHeatmap = async (req, res) => {
   try {
     const rawData = await Complaint.aggregate([
-      { $group: { _id: "$ward", count: { $sum: 1 } } }
+      { $match: { location: { $exists: true } } },
+      {
+        $group: {
+          _id: "$wardNumber",
+          count: { $sum: 1 },
+          lat: { $first: { $arrayElemAt: ["$location.coordinates", 1] } },
+          lng: { $first: { $arrayElemAt: ["$location.coordinates", 0] } },
+          // Category breakdown for each ward
+          categories: { $push: "$category" },
+        },
+      },
     ]);
 
     const formatted = rawData.map((w) => ({
-      ward: w._id,
-      coordinates: getCoords(w._id),
+      ward: `Ward ${w._id}`,
+      wardNumber: w._id,
+      coordinates: { lat: w.lat, lng: w.lng },
       intensity: w.count,
     }));
 
@@ -76,21 +82,29 @@ export const getWardHeatmap = async (req, res) => {
 };
 
 // =========================================================================
-// 3. Hotspots
+// 3. Hotspots (Top 5 wards with most unresolved complaints)
 // =========================================================================
 // GET /api/heatmaps/hotspots
 export const getHotspots = async (req, res) => {
   try {
     const hotspots = await Complaint.aggregate([
-      { $match: { status: { $ne: "Resolved" } } },
-      { $group: { _id: "$ward", count: { $sum: 1 } } },
+      { $match: { status: { $nin: ["RESOLVED", "COMPLETED", "CLOSED"] } } },
+      {
+        $group: {
+          _id: "$wardNumber",
+          count: { $sum: 1 },
+          lat: { $first: { $arrayElemAt: ["$location.coordinates", 1] } },
+          lng: { $first: { $arrayElemAt: ["$location.coordinates", 0] } },
+        },
+      },
       { $sort: { count: -1 } },
       { $limit: 5 },
     ]);
 
     const formatted = hotspots.map((item) => ({
-      ward: item._id,
-      coordinates: getCoords(item._id),
+      ward: `Ward ${item._id}`,
+      wardNumber: item._id,
+      coordinates: { lat: item.lat, lng: item.lng },
       unresolvedCount: item.count,
     }));
 

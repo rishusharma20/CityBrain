@@ -1,19 +1,35 @@
 import Complaint from "../models/Complaint.js";
 import { sendSystemNotification } from "../utils/notificationHelper.js";
 
-// Helper: Construct scope query filter for the officer (assigned directly or matches dept/ward and is unassigned)
+// Helper: Construct scope query filter for the officer
 const getOfficerScopeFilter = (user) => {
   return {
     $or: [
       { assignedOfficer: user._id },
       {
-        department: user.department,
-        ward: user.ward,
+        department: getDeptMapping(user.department),
+        wardNumber: parseInt(user.ward) || 0,
         assignedOfficer: null,
       },
     ],
   };
 };
+
+// Map User department values to new Complaint department values
+const getDeptMapping = (userDept) => {
+  const map = {
+    Garbage: "Sanitation",
+    Road: "Roads",
+    Streetlight: "Electrical",
+    "Water Supply": "Water",
+    Drainage: "Water",
+  };
+  return map[userDept] || userDept;
+};
+
+// Active (non-terminal) statuses
+const ACTIVE_STATUSES = ["PENDING", "ASSIGNED", "ACCEPTED", "IN_PROGRESS", "UNDER_REVIEW", "ESCALATED"];
+const RESOLVED_STATUSES = ["RESOLVED", "COMPLETED", "CLOSED"];
 
 // =========================================================================
 // 1. Officer Dashboard
@@ -32,33 +48,17 @@ export const getOfficerDashboard = async (req, res) => {
           pending: {
             $sum: {
               $cond: [
-                { $in: ["$status", ["Pending", "Accepted", "In_Progress"]] },
+                { $in: ["$status", ACTIVE_STATUSES] },
                 1,
                 0,
               ],
             },
           },
           resolved: {
-            $sum: { $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0] },
+            $sum: { $cond: [{ $in: ["$status", RESOLVED_STATUSES] }, 1, 0] },
           },
           escalated: {
-            $sum: {
-              $cond: [
-                {
-                  $or: [
-                    { $eq: ["$status", "Escalated"] },
-                    {
-                      $and: [
-                        { $ne: ["$status", "Resolved"] },
-                        { $lt: ["$slaDeadline", new Date()] },
-                      ],
-                    },
-                  ],
-                },
-                1,
-                0,
-              ],
-            },
+            $sum: { $cond: [{ $eq: ["$status", "ESCALATED"] }, 1, 0] },
           },
         },
       },
@@ -67,7 +67,7 @@ export const getOfficerDashboard = async (req, res) => {
     const latestComplaints = await Complaint.find(scopeFilter)
       .sort({ createdAt: -1 })
       .limit(5)
-      .populate("citizen", "fullName email phone");
+      .populate("createdBy", "fullName email phone");
 
     const stats = statsResult[0] || {
       total: 0,
@@ -105,7 +105,7 @@ export const getAssignedComplaints = async (req, res) => {
   try {
     const complaints = await Complaint.find({ assignedOfficer: req.user._id })
       .sort({ updatedAt: -1 })
-      .populate("citizen", "fullName email phone");
+      .populate("createdBy", "fullName email phone");
 
     res.status(200).json({
       success: true,
@@ -130,13 +130,10 @@ export const getOfficerStatistics = async (req, res) => {
     const officerId = req.user._id;
 
     const complaints = await Complaint.find({
-      $or: [
-        { assignedOfficer: officerId },
-        { "remarks.officer": officerId },
-      ],
+      assignedOfficer: officerId,
     });
 
-    let totalAssigned = 0;
+    let totalAssigned = complaints.length;
     let resolvedCount = 0;
     let pendingCount = 0;
     let escalatedCount = 0;
@@ -144,14 +141,7 @@ export const getOfficerStatistics = async (req, res) => {
     let totalResolutionTimeHours = 0;
 
     complaints.forEach((comp) => {
-      if (
-        comp.assignedOfficer &&
-        comp.assignedOfficer.toString() === officerId.toString()
-      ) {
-        totalAssigned++;
-      }
-
-      if (comp.status === "Resolved") {
+      if (RESOLVED_STATUSES.includes(comp.status)) {
         resolvedCount++;
         if (comp.resolvedAt && comp.slaDeadline) {
           if (new Date(comp.resolvedAt) <= new Date(comp.slaDeadline)) {
@@ -160,9 +150,9 @@ export const getOfficerStatistics = async (req, res) => {
           const durationMs = new Date(comp.resolvedAt) - new Date(comp.createdAt);
           totalResolutionTimeHours += durationMs / (1000 * 60 * 60);
         }
-      } else if (comp.status === "Escalated") {
+      } else if (comp.status === "ESCALATED") {
         escalatedCount++;
-      } else if (["Pending", "Accepted", "In_Progress"].includes(comp.status)) {
+      } else if (ACTIVE_STATUSES.includes(comp.status)) {
         pendingCount++;
         if (comp.slaDeadline && new Date() > new Date(comp.slaDeadline)) {
           escalatedCount++;
@@ -206,17 +196,12 @@ export const getOfficerStatistics = async (req, res) => {
 // GET /api/officer/history
 export const getOfficerHistory = async (req, res) => {
   try {
-    const historyFilter = {
-      $or: [
-        { assignedOfficer: req.user._id },
-        { "remarks.officer": req.user._id },
-      ],
-      status: { $in: ["Resolved", "Rejected"] },
-    };
-
-    const complaints = await Complaint.find(historyFilter)
+    const complaints = await Complaint.find({
+      assignedOfficer: req.user._id,
+      status: { $in: RESOLVED_STATUSES },
+    })
       .sort({ resolvedAt: -1, updatedAt: -1 })
-      .populate("citizen", "fullName email phone");
+      .populate("createdBy", "fullName email phone");
 
     res.status(200).json({
       success: true,
@@ -247,17 +232,7 @@ export const acceptComplaint = async (req, res) => {
       });
     }
 
-    if (
-      complaint.department !== req.user.department ||
-      complaint.ward !== req.user.ward
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: Complaint out of your department/ward scope.",
-      });
-    }
-
-    if (complaint.assignedOfficer) {
+    if (complaint.assignedOfficer && complaint.assignedOfficer.toString() !== req.user._id.toString()) {
       return res.status(400).json({
         success: false,
         message: "This complaint is already accepted by another officer.",
@@ -265,16 +240,17 @@ export const acceptComplaint = async (req, res) => {
     }
 
     complaint.assignedOfficer = req.user._id;
-    complaint.status = "Accepted";
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Complaint accepted by Officer ${req.user.fullName}.`,
+    complaint.status = "ACCEPTED";
+    complaint.statusHistory.push({
+      status: "ACCEPTED",
+      changedBy: req.user._id,
+      remarks: `Complaint accepted by Officer ${req.user.fullName}.`,
     });
 
     await complaint.save();
 
     await sendSystemNotification({
-      recipient: complaint.citizen,
+      recipient: complaint.createdBy,
       sender: req.user._id,
       type: "Assignment",
       title: "Complaint Claimed",
@@ -323,11 +299,8 @@ export const rejectComplaint = async (req, res) => {
     const isAssigned =
       complaint.assignedOfficer &&
       complaint.assignedOfficer.toString() === req.user._id.toString();
-    const isScopeMatch =
-      complaint.department === req.user.department &&
-      complaint.ward === req.user.ward;
 
-    if (!isAssigned && !isScopeMatch) {
+    if (!isAssigned) {
       return res.status(403).json({
         success: false,
         message: "Forbidden: Action not authorized.",
@@ -335,16 +308,17 @@ export const rejectComplaint = async (req, res) => {
     }
 
     complaint.assignedOfficer = null;
-    complaint.status = "Rejected";
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Rejected by Officer ${req.user.fullName}. Reason: ${reason}`,
+    complaint.status = "PENDING";
+    complaint.statusHistory.push({
+      status: "PENDING",
+      changedBy: req.user._id,
+      remarks: `Rejected by Officer ${req.user.fullName}. Reason: ${reason}`,
     });
 
     await complaint.save();
 
     await sendSystemNotification({
-      recipient: complaint.citizen,
+      recipient: complaint.createdBy,
       sender: req.user._id,
       type: "Status_Update",
       title: "Complaint Reverted",
@@ -373,7 +347,7 @@ export const rejectComplaint = async (req, res) => {
 export const updateComplaintStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ["Accepted", "In_Progress", "Resolved", "Escalated"];
+    const validStatuses = ["ACCEPTED", "IN_PROGRESS", "UNDER_REVIEW", "RESOLVED", "ESCALATED"];
 
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({
@@ -401,26 +375,21 @@ export const updateComplaintStatus = async (req, res) => {
       });
     }
 
-    if (status === "Resolved") {
-      if (!complaint.resolutionImage) {
-        return res.status(400).json({
-          success: false,
-          message: "A resolution image is required before marking as Resolved.",
-        });
-      }
+    if (status === "RESOLVED") {
       complaint.resolvedAt = Date.now();
     }
 
     complaint.status = status;
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Status updated to ${status} by Officer ${req.user.fullName}.`,
+    complaint.statusHistory.push({
+      status,
+      changedBy: req.user._id,
+      remarks: `Status updated to ${status} by Officer ${req.user.fullName}.`,
     });
 
     await complaint.save();
 
     await sendSystemNotification({
-      recipient: complaint.citizen,
+      recipient: complaint.createdBy,
       sender: req.user._id,
       type: "Status_Update",
       title: "Status Update",
@@ -469,20 +438,18 @@ export const addRemarks = async (req, res) => {
     const isAssigned =
       complaint.assignedOfficer &&
       complaint.assignedOfficer.toString() === req.user._id.toString();
-    const isScopeMatch =
-      complaint.department === req.user.department &&
-      complaint.ward === req.user.ward;
 
-    if (!isAssigned && !isScopeMatch) {
+    if (!isAssigned) {
       return res.status(403).json({
         success: false,
         message: "Forbidden: Not authorized.",
       });
     }
 
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: remarks,
+    complaint.statusHistory.push({
+      status: complaint.status,
+      changedBy: req.user._id,
+      remarks,
     });
 
     await complaint.save();
@@ -528,32 +495,24 @@ export const markComplaintCompleted = async (req, res) => {
       });
     }
 
-    const finalImage = resolutionImage || complaint.resolutionImage;
-    if (!finalImage || finalImage.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Resolution image URL is required for completion.",
-      });
-    }
-
-    complaint.status = "Resolved";
+    complaint.status = "RESOLVED";
     complaint.resolvedAt = Date.now();
-    complaint.resolutionImage = finalImage;
+    complaint.resolutionRemarks = remarks || "Resolved and completed.";
 
-    const finalRemarkText = remarks || "Resolved and completed.";
-    complaint.remarks.push({
-      officer: req.user._id,
-      text: `Completed: ${finalRemarkText}`,
+    complaint.statusHistory.push({
+      status: "RESOLVED",
+      changedBy: req.user._id,
+      remarks: `Completed: ${remarks || "Resolved and completed."}`,
     });
 
     await complaint.save();
 
     await sendSystemNotification({
-      recipient: complaint.citizen,
+      recipient: complaint.createdBy,
       sender: req.user._id,
       type: "Completion",
       title: "Complaint Resolved",
-      message: `Your complaint "${complaint.title}" has been resolved. Proof: ${finalImage}`,
+      message: `Your complaint "${complaint.title}" has been resolved.`,
       complaint: complaint._id,
     });
 
@@ -577,20 +536,18 @@ export const markComplaintCompleted = async (req, res) => {
 // GET /api/officer/escalated
 export const getEscalatedComplaints = async (req, res) => {
   try {
-    const scopeFilter = getOfficerScopeFilter(req.user);
-
     const complaints = await Complaint.find({
-      ...scopeFilter,
       $or: [
-        { status: "Escalated" },
+        { assignedOfficer: req.user._id, status: "ESCALATED" },
         {
-          status: { $ne: "Resolved" },
+          assignedOfficer: req.user._id,
+          status: { $nin: RESOLVED_STATUSES },
           slaDeadline: { $lt: new Date() },
         },
       ],
     })
       .sort({ slaDeadline: 1 })
-      .populate("citizen", "fullName email phone");
+      .populate("createdBy", "fullName email phone");
 
     res.status(200).json({
       success: true,

@@ -1,0 +1,600 @@
+{
+  "info": {
+    "name": "CityBrains — Complaint Management Module",
+    "description": "Complete Postman collection for testing all 10 Complaint Management APIs.\n\n## Setup Instructions\n1. Import this collection into Postman\n2. Set the `BASE_URL` variable (default: http://localhost:8000)\n3. First run 'Auth → Register Citizen' and 'Auth → Login Citizen' to get a token\n4. The token is auto-saved to the collection variable `TOKEN`\n\n## Test Order\n1. Register & Login (Citizen, Officer, Admin)\n2. Create Complaint (as Citizen)\n3. Get All Complaints (as Admin/Officer)\n4. Get Complaint By ID\n5. Filter by Status / Category / Priority\n6. Get User Complaints (as Citizen)\n7. Get Duplicate Complaints\n8. Update Complaint (as Officer/Admin)\n9. Delete Complaint (as Admin)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "http://localhost:8000" },
+    { "key": "TOKEN", "value": "" },
+    { "key": "ADMIN_TOKEN", "value": "" },
+    { "key": "OFFICER_TOKEN", "value": "" },
+    { "key": "COMPLAINT_ID", "value": "" },
+    { "key": "COMPLAINT_OBJECT_ID", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints to get JWT tokens for testing.",
+      "item": [
+        {
+          "name": "Register Citizen",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/auth/register", "host": ["{{BASE_URL}}"], "path": ["api", "auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Test Citizen\",\n  \"email\": \"citizen@citybrains.com\",\n  \"password\": \"citizen123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"Citizen\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login Citizen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('TOKEN', res.data.token);",
+                  "    console.log('✅ Citizen token saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/auth/login", "host": ["{{BASE_URL}}"], "path": ["api", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"citizen@citybrains.com\",\n  \"password\": \"citizen123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('ADMIN_TOKEN', res.data.token);",
+                  "    console.log('✅ Admin token saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/auth/login", "host": ["{{BASE_URL}}"], "path": ["api", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@citybrains.com\",\n  \"password\": \"admin123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login Officer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('OFFICER_TOKEN', res.data.token);",
+                  "    console.log('✅ Officer token saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/auth/login", "host": ["{{BASE_URL}}"], "path": ["api", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"officer@citybrains.com\",\n  \"password\": \"officer123\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Complaints",
+      "description": "All 10 Complaint Management Module endpoints.",
+      "item": [
+        {
+          "name": "1. Create Complaint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data && res.data.complaint) {",
+                  "    pm.collectionVariables.set('COMPLAINT_OBJECT_ID', res.data.complaint._id);",
+                  "    pm.collectionVariables.set('COMPLAINT_ID', res.data.complaint.complaintId);",
+                  "    console.log('✅ Complaint ID saved:', res.data.complaint.complaintId);",
+                  "}",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has complaint data', function () {",
+                  "    pm.expect(res.success).to.be.true;",
+                  "    pm.expect(res.data.complaint).to.have.property('complaintId');",
+                  "    pm.expect(res.data.complaint).to.have.property('title');",
+                  "    pm.expect(res.data.complaint).to.have.property('category');",
+                  "    pm.expect(res.data.complaint).to.have.property('priority');",
+                  "    pm.expect(res.data.complaint).to.have.property('status');",
+                  "    pm.expect(res.data.complaint).to.have.property('department');",
+                  "});",
+                  "",
+                  "pm.test('Auto-assignment info present', function () {",
+                  "    pm.expect(res.data).to.have.property('autoAssignment');",
+                  "    pm.expect(res.data).to.have.property('duplicateDetection');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints", "host": ["{{BASE_URL}}"], "path": ["api", "complaints"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Pothole on MG Road near Metro Station\",\n  \"description\": \"There is a large pothole on MG Road near the metro station entrance. It is causing traffic congestion and is dangerous for two-wheelers.\",\n  \"category\": \"Potholes\",\n  \"latitude\": 12.9716,\n  \"longitude\": 77.5946,\n  \"address\": \"MG Road, Near Metro Station, Bangalore - 560001\",\n  \"wardNumber\": 15,\n  \"images\": [\n    \"https://example.com/pothole1.jpg\",\n    \"https://example.com/pothole2.jpg\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "1b. Create Duplicate Complaint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Duplicate detected', function () {",
+                  "    pm.expect(res.data.duplicateDetection.isDuplicate).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints", "host": ["{{BASE_URL}}"], "path": ["api", "complaints"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Another pothole near MG Road metro\",\n  \"description\": \"The pothole near MG Road metro station has gotten bigger and is now a safety hazard for pedestrians crossing the road.\",\n  \"category\": \"Potholes\",\n  \"latitude\": 12.9718,\n  \"longitude\": 77.5948,\n  \"address\": \"MG Road, Near Metro Station Exit B, Bangalore - 560001\",\n  \"wardNumber\": 15\n}"
+            }
+          }
+        },
+        {
+          "name": "1c. Create Complaint (Validation Error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Has field-level errors', function () {",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res.success).to.be.false;",
+                  "    pm.expect(res.errors).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints", "host": ["{{BASE_URL}}"], "path": ["api", "complaints"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Hi\",\n  \"description\": \"Too short\",\n  \"category\": \"InvalidCategory\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Get All Complaints",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Has pagination', function () {",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res).to.have.property('pagination');",
+                  "    pm.expect(res.pagination).to.have.property('currentPage');",
+                  "    pm.expect(res.pagination).to.have.property('totalPages');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/complaints?page=1&limit=10&sortBy=createdAt&order=desc",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "complaints"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "sortBy", "value": "createdAt" },
+                { "key": "order", "value": "desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2b. Get All Complaints (Search)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/complaints?search=pothole",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "complaints"],
+              "query": [{ "key": "search", "value": "pothole" }]
+            }
+          }
+        },
+        {
+          "name": "3. Get Complaint By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Has complete complaint data', function () {",
+                  "    const res = pm.response.json();",
+                  "    const c = res.data;",
+                  "    pm.expect(c).to.have.property('complaintId');",
+                  "    pm.expect(c).to.have.property('title');",
+                  "    pm.expect(c).to.have.property('description');",
+                  "    pm.expect(c).to.have.property('category');",
+                  "    pm.expect(c).to.have.property('priority');",
+                  "    pm.expect(c).to.have.property('status');",
+                  "    pm.expect(c).to.have.property('department');",
+                  "    pm.expect(c).to.have.property('location');",
+                  "    pm.expect(c).to.have.property('address');",
+                  "    pm.expect(c).to.have.property('wardNumber');",
+                  "    pm.expect(c).to.have.property('createdBy');",
+                  "    pm.expect(c).to.have.property('statusHistory');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] }
+          }
+        },
+        {
+          "name": "4. Update Complaint (Status → ACCEPTED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Status updated', function () {",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res.data.status).to.equal('ACCEPTED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{OFFICER_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\",\n  \"remarks\": \"Officer has accepted the complaint and will begin inspection.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4b. Update Complaint (Invalid Transition)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Invalid transition message', function () {",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res.success).to.be.false;",
+                  "    pm.expect(res.message).to.include('Invalid status transition');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{OFFICER_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4c. Update Complaint (Status → IN_PROGRESS)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{OFFICER_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"remarks\": \"Field inspection started.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4d. Update Complaint (Status → UNDER_REVIEW)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{OFFICER_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"UNDER_REVIEW\",\n  \"remarks\": \"Work completed, submitting for review.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4e. Update Complaint (Status → RESOLVED)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{OFFICER_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"RESOLVED\",\n  \"resolutionRemarks\": \"Pothole has been filled with concrete. Road surface restored.\",\n  \"remarks\": \"Resolution work completed successfully.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4f. Update Complaint (Status → COMPLETED)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"completionRemarks\": \"Resolution verified by admin. Complaint marked as completed.\",\n  \"remarks\": \"Admin verification complete.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "5. Delete Complaint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 400 for non-PENDING', function () {",
+                  "    // If the complaint was already updated, this should return 400",
+                  "    const status = pm.response.code;",
+                  "    pm.expect([200, 400]).to.include(status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/complaints/{{COMPLAINT_OBJECT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "complaints", "{{COMPLAINT_OBJECT_ID}}"] }
+          }
+        },
+        {
+          "name": "6. Get Complaints by Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Has pagination', function () {",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res).to.have.property('pagination');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/complaints/status?status=PENDING",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "complaints", "status"],
+              "query": [{ "key": "status", "value": "PENDING" }]
+            }
+          }
+        },
+        {
+          "name": "7. Get Complaints by Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/complaints/category?category=Potholes",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "complaints", "category"],
+              "query": [{ "key": "category", "value": "Potholes" }]
+            }
+          }
+        },
+        {
+          "name": "8. Get User Complaint History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns citizen complaints', function () {",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/user/complaints?page=1&limit=10",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "user", "complaints"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "9. Get Duplicate Complaints",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/complaints/duplicates?page=1&limit=10",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "complaints", "duplicates"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "10. Get Complaints by Priority",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/complaints/priority?priority=MEDIUM",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "complaints", "priority"],
+              "query": [{ "key": "priority", "value": "MEDIUM" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

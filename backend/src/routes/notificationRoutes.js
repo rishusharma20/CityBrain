@@ -17,6 +17,7 @@ router.use(protect);
 router.get("/", getMyNotifications);
 router.get("/unread", getMyUnreadNotifications);
 router.put("/read-all", markAllRead);
+router.put("/:id/read", markNotificationRead);
 router.delete("/", deleteAllNotifications);
 router.delete("/:id", deleteNotification);
 
