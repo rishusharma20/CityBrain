@@ -4,6 +4,7 @@ import axios from "axios";
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [loading, setLoading] = useState(true);
@@ -13,7 +14,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-          const res = await axios.get("http://localhost:8000/api/auth/profile");
+          const res = await axios.get(`${API_URL}/api/auth/profile`);
           if (res.data.success) {
             setUser(res.data.user);
           } else {
@@ -31,7 +32,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const res = await axios.post("http://localhost:8000/api/auth/login", { email, password });
+      const res = await axios.post(`${API_URL}/api/auth/login`, { email, password });
       if (res.data.success) {
         const newToken = res.data.token;
         localStorage.setItem("token", newToken);
@@ -50,7 +51,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const res = await axios.post("http://localhost:8000/api/auth/register", userData);
+      const res = await axios.post(`${API_URL}/api/auth/register`, userData);
       if (res.data.success) {
         const newToken = res.data.token;
         localStorage.setItem("token", newToken);
