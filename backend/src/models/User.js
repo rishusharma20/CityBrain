@@ -44,7 +44,18 @@ const userSchema = new mongoose.Schema(
     department: {
       type: String,
       enum: {
-        values: ["Road", "Garbage", "Drainage", "Streetlight", "Water Supply"],
+        values: [
+          "Sanitation",
+          "Roads",
+          "Electrical",
+          "Water",
+          "General",
+          "Road",
+          "Garbage",
+          "Drainage",
+          "Streetlight",
+          "Water Supply"
+        ],
         message: "{VALUE} is not a valid department",
       },
       default: null,

@@ -193,7 +193,7 @@ export const getAllComplaints = async (req, res) => {
         "Water Supply": "Water",
         Drainage: "Water",
       };
-      const mappedDept = deptMapping[req.user.department];
+      const mappedDept = deptMapping[req.user.department] || req.user.department;
       if (mappedDept) {
         filter.department = mappedDept;
       }
@@ -547,7 +547,7 @@ export const getComplaintsByStatus = async (req, res) => {
         Streetlight: "Electrical",
         "Water Supply": "Water",
       };
-      const mappedDept = deptMapping[req.user.department];
+      const mappedDept = deptMapping[req.user.department] || req.user.department;
       if (mappedDept) filter.department = mappedDept;
     }
 
@@ -738,7 +738,7 @@ export const getComplaintsByPriority = async (req, res) => {
         Streetlight: "Electrical",
         "Water Supply": "Water",
       };
-      const mappedDept = deptMapping[req.user.department];
+      const mappedDept = deptMapping[req.user.department] || req.user.department;
       if (mappedDept) filter.department = mappedDept;
     }
 
