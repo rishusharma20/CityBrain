@@ -90,8 +90,6 @@ export default function Login() {
                 e.target.style.display = "none";
               }}
             />
-            <h1 className="text-4xl font-extrabold text-blue-700 mb-2">CityBrains</h1>
-            <p className="text-slate-500 max-w-sm">Smart Civic Intelligence, Public Accountability, and Live SLA Resolution System.</p>
             <div className="mt-8">
               <Link to="/public" className="px-6 py-2.5 bg-blue-600 text-white rounded-full font-semibold shadow hover:bg-blue-700 transition">
                 Go to Public Transparency Page
@@ -162,7 +160,7 @@ export default function Login() {
                       placeholder="Full Name"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900"}`}
+                      className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400"}`}
                       required
                     />
                   </div>
@@ -176,7 +174,7 @@ export default function Login() {
                       placeholder="Phone number"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900"}`}
+                      className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400"}`}
                       required
                     />
                   </div>
@@ -191,7 +189,6 @@ export default function Login() {
                       >
                         <option value="Citizen">Citizen</option>
                         <option value="Officer">Officer</option>
-                        <option value="Admin">Admin</option>
                       </select>
                     </div>
 
@@ -205,7 +202,7 @@ export default function Login() {
                           onChange={(e) => setWard(e.target.value)}
                           min="1"
                           max="100"
-                          className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-slate-200 text-slate-900"}`}
+                          className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400"}`}
                           required
                         />
                       </div>
@@ -240,7 +237,7 @@ export default function Login() {
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900"}`}
+                  className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400"}`}
                   required
                 />
               </div>
@@ -254,7 +251,7 @@ export default function Login() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900"}`}
+                  className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${isDarkMode ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400"}`}
                   required
                 />
               </div>
