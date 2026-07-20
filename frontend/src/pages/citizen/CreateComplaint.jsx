@@ -28,7 +28,7 @@ export default function CreateComplaint() {
   const [longitude, setLongitude] = useState("");
   const [address, setAddress] = useState("");
   const [wardNumber, setWardNumber] = useState("");
-  const [images, setImages] = useState([]);
+  const [imageLink, setImageLink] = useState("");
 
   // Attempt browser geolocation auto-fill on mount
   useEffect(() => {
@@ -45,19 +45,7 @@ export default function CreateComplaint() {
     }
   }, []);
 
-  const handleAddImageUrl = () => {
-    setImages([...images, ""]);
-  };
-
-  const handleImageChange = (index, value) => {
-    const updated = [...images];
-    updated[index] = value;
-    setImages(updated);
-  };
-
-  const handleRemoveImage = (index) => {
-    setImages(images.filter((_, idx) => idx !== index));
-  };
+  // Image handlers removed for simpler UI
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -70,11 +58,11 @@ export default function CreateComplaint() {
       title,
       description,
       category,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
+      latitude: latitude ? parseFloat(latitude) : 12.9716,
+      longitude: longitude ? parseFloat(longitude) : 77.5946,
       address,
       wardNumber: parseInt(wardNumber),
-      images: images.filter((img) => img.trim() !== "")
+      images: imageLink.trim() ? [imageLink.trim()] : []
     };
 
     try {
@@ -89,7 +77,7 @@ export default function CreateComplaint() {
         setLongitude("");
         setAddress("");
         setWardNumber("");
-        setImages([]);
+        setImageLink("");
         
         setTimeout(() => {
           navigate("/dashboard/my-complaints");
@@ -197,31 +185,7 @@ export default function CreateComplaint() {
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Latitude</label>
-              <input
-                type="number"
-                step="any"
-                value={latitude}
-                onChange={(e) => setLatitude(e.target.value)}
-                placeholder="e.g. 12.9716"
-                required
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Longitude</label>
-              <input
-                type="number"
-                step="any"
-                value={longitude}
-                onChange={(e) => setLongitude(e.target.value)}
-                placeholder="e.g. 77.5946"
-                required
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              />
-            </div>
+            {/* Latitude and Longitude fields are hidden for simplicity and auto-fetched via geolocation */}
 
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-semibold text-slate-700">Address / Location Reference</label>
@@ -235,36 +199,15 @@ export default function CreateComplaint() {
               />
             </div>
 
-            <div className="space-y-4 md:col-span-2 border-t border-slate-100 pt-4">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-semibold text-slate-700">Complaint Image URLs</label>
-                <button
-                  type="button"
-                  onClick={handleAddImageUrl}
-                  className="text-xs text-blue-600 hover:underline font-bold flex items-center space-x-1"
-                >
-                  <span>+ Add Image Link</span>
-                </button>
-              </div>
-
-              {images.map((img, idx) => (
-                <div key={idx} className="flex items-center space-x-2">
-                  <input
-                    type="url"
-                    value={img}
-                    onChange={(e) => handleImageChange(idx, e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1 px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(idx)}
-                    className="px-3 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 text-xs font-semibold"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+            <div className="space-y-2 md:col-span-2 border-t border-slate-100 pt-4">
+              <label className="text-sm font-semibold text-slate-700">Image Link (Optional)</label>
+              <input
+                type="url"
+                value={imageLink}
+                onChange={(e) => setImageLink(e.target.value)}
+                placeholder="Paste a link to a photo of the issue"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
             </div>
           </div>
 
