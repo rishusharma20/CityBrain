@@ -18,6 +18,7 @@ export default function CreateComplaint() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [success, setSuccess] = useState("");
 
   const [title, setTitle] = useState("");
@@ -61,6 +62,7 @@ export default function CreateComplaint() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
     setSuccess("");
     setLoading(true);
 
@@ -96,6 +98,9 @@ export default function CreateComplaint() {
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || "Failed to submit issue. Please check all fields.");
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setLoading(false);
     }
@@ -115,9 +120,18 @@ export default function CreateComplaint() {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {error && (
-          <div className="p-4 bg-red-50 border-b border-red-100 text-red-700 text-sm font-medium flex items-center gap-2">
-            <AlertCircle className="h-5 w-5" />
-            <span>{error}</span>
+          <div className="p-4 bg-red-50 border-b border-red-100 text-red-700 text-sm font-medium flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+            {Object.keys(fieldErrors).length > 0 && (
+              <ul className="list-disc pl-9 space-y-1 text-xs">
+                {Object.values(fieldErrors).map((msg, idx) => (
+                  <li key={idx}>{msg}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
